@@ -1,1 +1,0 @@
-gcc -o btest *.c -lpthread && chmod +x btest

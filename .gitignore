@@ -1,3 +1,2 @@
-btest
-rust_btest-server/**
 .vscode/**
+target/
