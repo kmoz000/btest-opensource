@@ -4,10 +4,16 @@ use md5;
 use rand::RngCore;
 use std::env;
 use std::io::{Read, Write};
-use std::net::{TcpListener, TcpStream, UdpSocket};
+use std::net::{SocketAddr, TcpListener};
 use std::time::{Duration, SystemTime};
 use subtle;
-fn main() {
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
+use tokio::net::TcpListener as TokioTcpListener;
+use tokio::{net::UdpSocket, sync::mpsc};
+const MESSAGE_PREFIX: u8 = 0x07;
+const MESSAGE_SIZE: usize = 12;
+#[tokio::main]
+async fn main() {
     dotenv().ok();
     let username = env::var("USERNAME").unwrap_or("btest".to_owned());
     let password: String = env::var("PASSWORD").unwrap_or("btest".to_owned());
@@ -27,11 +33,9 @@ fn main() {
             Ok(mut client) => {
                 let client_address = client.peer_addr().expect("Failed to get client address");
                 println!("Connection from {}", client_address);
-
                 // Sending hello
                 let data = vec![0x01, 0x00, 0x00, 0x00];
                 client.write_all(&data).expect("Failed to send data");
-
                 // Reading reply
                 let mut buffer = [0; 1024];
                 client.read(&mut buffer).expect("Failed to read data");
@@ -43,18 +47,15 @@ fn main() {
                     client
                         .write_all(&hex::decode("02000000").expect("Failed to decode hex"))
                         .expect("Failed to send data");
-
                     // Setting Digest
                     let randomdigest = generate_random_array();
                     // Sending empty_array Digest
                     client
                         .write_all(&randomdigest)
                         .expect("Failed to send digest");
-
                     // Receiving Data
                     let mut data = [0u8; 1024];
                     client.read(&mut data).expect("Failed to receive data");
-
                     // Printing Data
                     let currentpasshash = hash_gen(&password, randomdigest);
                     let receivedpasshash = hex::encode(&data[0..16]);
@@ -87,21 +88,70 @@ fn main() {
                         }
                     }
                 }
-                
+
                 if !require_auth || authisvalid {
                     println!("Sending hello");
-                        // Sending hello
-                    let data = vec![0x01, 0x00, 0x00, 0x00];
-                    client.write_all(&data).expect("Failed to send data");
+                    // Sending hello
+                    client
+                        .write_all(&hex::decode("01000000").unwrap_or_default())
+                        .expect("Failed to send data");
                     if action.proto == "TCP" {
+                        tokio::spawn(handle_tcp(client, action.tx_size));
                         // Send TCP socket port
                         // Establish TCP socket
                         // Send TCP data
-                        todo!()
+                        // todo!()
                     } else {
-                        // Send UDP socket port
-                        // Establish UDP socket
+                        // send ready message:
                         // Send UDP data
+                        let udpport: u16 = udp_port_offset;
+                        let mut buffer = [0; 32];
+                        if let Ok(len) = client.read(&mut buffer) {
+                            // print!("buffer : {:?} size of {}\n", buffer, len);
+                            client
+                                .write_all(&udpport.to_ne_bytes())
+                                .expect("Failed to send data");
+                            if let Ok(sock) = UdpSocket::bind(format!("0.0.0.0:{}", udp_port_offset)).await {
+                                println!("Server listening on port 2001...");
+                                let mut udpclient = client_address.clone();
+                                udpclient.set_port(udp_port_offset * 2);
+                                match sock.connect(udpclient).await {
+                                    Ok(_) => {
+                                        print!("udp socket connected to {}", udpclient);
+                                        let mut seq: u32 = 1;
+                                        loop {
+                                            // let message: [u8; MESSAGE_SIZE] =
+                                                // [MESSAGE_PREFIX, 0, 0, 0, 1, 0, 0, 0, 54, 110, 3, 0];
+                                            // recv from remote_addr
+                                            let mut buf = vec![0; 12];
+                                            // Pack the data into a binary packet
+                                            
+                                            if let Ok(len) = sock.recv(&mut buf).await {
+                                                if let Ok(len) = sock.send(&mut buf).await {
+                                                    if len > 0 {
+                                                        seq += 1;
+                                                    }
+                                                    print!("sent to udpclient_addr packet buf: {}\n", len);
+                                                };
+                                                print!(
+                                                    "recv from udpclient_addr packet buf: {} / {}\n",
+                                                    hex::encode(&buf),
+                                                    len
+                                                );
+                                            };
+                                            // handle_udp(&sock, action.tx_size).await;
+                                        }
+                                    }
+                                    Err(_) => {
+                                        print!("udp socket faild to connect to {}", udpclient);
+                                    }
+                                };
+                            };
+                        } else {
+                            client
+                                .write_all(&hex::decode("00000000").expect("Failed to decode hex"))
+                                .expect("Failed to send acceptance");
+                        };
                     }
                 }
             }
@@ -138,59 +188,6 @@ impl RecvStats {
         }
     }
 }
-fn test_udp_rx(udp_socket: &UdpSocket, cmd: &CmdStruct) {
-    let mut recv_stats = RecvStats::new();
-    let mut buf = vec![0; cmd.tx_size];
-    let mut last = SystemTime::now();
-    let mut last_seq = 0;
-    let _ = udp_socket.set_write_timeout(Some(Duration::from_secs(30)));
-    loop {
-        match udp_socket.recv_from(&mut buf) {
-            Ok((n_bytes, saddress)) => {
-                let now = SystemTime::now();
-                let this_seq = (buf[0] as u64) << 24
-                    | (buf[1] as u64) << 16
-                    | (buf[2] as u64) << 8
-                    | buf[3] as u64;
-
-                if last_seq > 0 {
-                    recv_stats.lost_packets += this_seq - last_seq - 1;
-                }
-
-                if last != SystemTime::UNIX_EPOCH {
-                    let interval = now
-                        .duration_since(last)
-                        .unwrap_or_else(|_| Duration::from_secs(0));
-                    let interval_us = interval.as_micros();
-
-                    if recv_stats.max_interval == 0 {
-                        recv_stats.max_interval = interval_us as u64;
-                        recv_stats.min_interval = interval_us as u64;
-                    } else {
-                        if interval_us > recv_stats.max_interval.into() {
-                            recv_stats.max_interval = interval_us as u64;
-                        }
-                        if interval_us < recv_stats.min_interval.into() {
-                            recv_stats.min_interval = interval_us as u64;
-                        }
-                    }
-                }
-                last = now;
-                recv_stats.recv_bytes += n_bytes as u64;
-                print!("{:?}", recv_stats);
-                last_seq = this_seq;
-            }
-            Err(_) => {
-                // Ignore connection refused - the other end probably wasn't ready
-                print!(
-                    "{}",
-                    "Ignore connection refused - the other end probably wasn't ready"
-                );
-                // Handle other errors as needed
-            }
-        }
-    }
-}
 
 #[derive(Debug, Clone, Default)]
 struct Action {
@@ -202,6 +199,23 @@ struct Action {
     unknown: u32,
     remote_tx_speed: u32,
     local_tx_speed: u32,
+}
+async fn handle_tcp(mut socket: std::net::TcpStream, tx_size: u16) {
+    println!("Connection established");
+    let hello = [0x01, 0x00, 0x00, 0x00];
+    socket.write_all(&hello).unwrap();
+    print!("tx_size={:?}", tx_size);
+    // loop {
+    //     let data = vec![0u8; tx_size.into()]; // Adjust the size as needed
+    //     socket.write_all(&data).await.unwrap();
+    //     println!("Sent data");
+    // }
+}
+async fn handle_udp(socket: &UdpSocket, tx_size: u16) {
+    let hello = [0x01, 0x00, 0x00, 0x00];
+    let _ = socket.send(&hello).await.unwrap();
+    let mut buf = Vec::with_capacity(tx_size.into());
+    let _ = socket.send(&mut buf).await.unwrap();
 }
 
 fn unpack_cmd(data: &[u8]) -> Action {
@@ -255,10 +269,5 @@ pub fn hash_gen(input_password: &str, nonce: [u8; 16]) -> String {
 
 #[test]
 fn decrypt() {
-    // Convert bytes to a string
-    let input_password = "admin"; // Replace this with the password you want to validate
-
-    // Validate the password
-    // calc_md5auth = calc_md5auth(input_password, saved_password_md5_hex);
-    println!("Password: {}",);
+    let sendport = hex::encode(2001_u16.to_be_bytes());
 }
