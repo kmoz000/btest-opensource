@@ -16,7 +16,7 @@ COPY --from=docker.io/tailscale/tailscale:stable /usr/local/bin/tailscale /usr/l
 # Define environment variables
 ENV USERNAME admin
 ENV PASSWORD admin
-RUN [ -n "$AUTHKEY" ] && [ ! -z "$AUTHKEY" ] && tailscale up --authkey $AUTHKEY || { echo "AuthKey is not set or empty. Exiting."; exit 1; }
+RUN [ -n "$AUTHKEY" ] && [ ! -z "$AUTHKEY" ] && tailscale up --authkey $AUTHKEY
 
 # Set the entry point for the container
 ENTRYPOINT ["./btest"]
