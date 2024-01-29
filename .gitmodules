@@ -1,3 +1,3 @@
 [submodule "client"]
 	path = client
-	url = https://github.com/kadosch/mikrotik_btest.git
+	url = https://github.com/kmoz000/mikrotik_btest.git
