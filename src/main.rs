@@ -1,19 +1,18 @@
+use constants::udp_port_offset;
 use dotenv::dotenv;
 use hex::{encode, ToHex};
 use md5;
 use rand::RngCore;
-use std::env;
 use std::io::{Read, Write};
 use std::net::{SocketAddr, TcpListener};
 use std::time::{Duration, SystemTime};
+use std::{env, string};
 use subtle;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use tokio::net::TcpListener as TokioTcpListener;
 use tokio::{net::UdpSocket, sync::mpsc};
-const MESSAGE_PREFIX: u8 = 0x07;
-const MESSAGE_SIZE: usize = 12;
-const udp_port_offset: u16 = 256;
-const btestport: u16 = 2000;
+mod constants;
+
 #[tokio::main]
 async fn main() {
     dotenv().ok();
@@ -24,8 +23,8 @@ async fn main() {
         .parse::<bool>()
         .unwrap_or(true);
     let mut authisvalid = false;
-    let listener =
-        TcpListener::bind(format!("0.0.0.0:{}", btestport)).expect("Failed to bind socket");
+    let listener = TcpListener::bind(format!("0.0.0.0:{}", constants::btestport))
+        .expect("Failed to bind socket");
     println!("Server waiting for client connection on port 2000");
 
     for stream in listener.incoming() {
@@ -112,7 +111,7 @@ async fn main() {
                             if let Ok(sock) =
                                 UdpSocket::bind(format!("0.0.0.0:{}", udp_port_offset)).await
                             {
-                                tokio::spawn(handle_udp(sock, action, client_address));
+                                let hendles = tokio::spawn(handle_udp(sock, action, client_address));
                             };
                         } else {
                             client
@@ -169,13 +168,26 @@ struct Action {
 }
 async fn handle_tcp(mut socket: std::net::TcpStream, tx_size: u16) {
     println!("Connection established");
-    let hello = [0x00, 0x00, 0x00, 0x00];
+    let hello = [0x10, 0x00, 0x00, 0x00];
     socket.write_all(&hello).unwrap();
     print!("tx_size={:?}\n", tx_size);
+    let mut seq: u32 = 1;
     loop {
-        let data = vec![0u8; tx_size.into()]; // Adjust the size as needed
-        socket.write_all(&data).unwrap();
-        println!("Sent data");
+        // let message: [u8; MESSAGE_SIZE] =
+        // [MESSAGE_PREFIX, 0, 0, 0, 1, 0, 0, 0, 54, 110, 3, 0];
+        // recv from remote_addr
+        let mut buf = vec![0; 12];
+        // Pack the data into a binary packet
+        if let Ok(_) = socket.read(&mut buf) {
+            if let Ok(()) = socket.write_all(&mut buf) {
+                seq += 1;
+            };
+            print!(
+                "recv from tcpclient packet buf: {} / {}\n",
+                hex::encode(&buf),
+                seq.to_string()
+            );
+        };
     }
 }
 async fn handle_udp(socket: UdpSocket, action: Action, client_address: SocketAddr) {
@@ -189,25 +201,40 @@ async fn handle_udp(socket: UdpSocket, action: Action, client_address: SocketAdd
                 // let message: [u8; MESSAGE_SIZE] =
                 // [MESSAGE_PREFIX, 0, 0, 0, 1, 0, 0, 0, 54, 110, 3, 0];
                 // recv from remote_addr
-                let mut buf = vec![0; 12];
-                // Pack the data into a binary packet
 
-                if let Ok(len) = socket.recv(&mut buf).await {
-                    if let Ok(len) = socket.send(&mut buf).await {
-                        if len > 0 {
+                let mut buf = vec![0; action.tx_size.into()];
+                match action.direction.as_str() {
+                    "TX" => {
+                        if let Ok(len) = socket.send(&buf).await {
+                            if len > 0 {
+                                seq += 1;
+                            }
+                        };
+                    }
+                    "RX" => {
+                        if let Ok(_) = socket.recv(&mut buf).await {
                             seq += 1;
+                            print!(
+                                "recv from udpclient_addr packet buf: {} / {}\n",
+                                hex::encode(&buf),
+                                seq.to_string()
+                            );
                         }
-                        print!(
-                            "sent to udpclient_addr packet buf: {} / {}\n",
-                            hex::encode(&buf),
-                            seq.to_string()
-                        );
-                    };
-                    print!(
-                        "recv from udpclient_addr packet buf: {} / {}\n",
-                        hex::encode(&buf),
-                        seq.to_string()
-                    );
+                    }
+                    _ => {
+                        if let Ok(_) = socket.recv(&mut buf).await {
+                            if let Ok(len) = socket.send(&mut buf).await {
+                                if len > 0 {
+                                    seq += 1;
+                                }
+                            };
+                            print!(
+                                "recv from udpclient_addr packet buf: {} / {}\n",
+                                hex::encode(&buf),
+                                seq.to_string()
+                            );
+                        };
+                    }
                 };
             }
         }
