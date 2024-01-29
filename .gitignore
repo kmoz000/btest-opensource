@@ -1,5 +1,3 @@
 .vscode/**
 target/
-client/client
-./**/*.o
-client
+client/*
