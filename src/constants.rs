@@ -5,3 +5,8 @@ pub const MESSAGE_PREFIX: u8 = 0x07;
 pub const MESSAGE_SIZE: usize = 12;
 pub const udp_port_offset: u16 = 256;
 pub const btestport: u16 = 2000;
+
+#[derive(Debug, Default, Clone)]
+pub struct Store {
+    pub current_port: u16
+}
