@@ -1,0 +1,50 @@
+Frame 53: 1514 bytes on wire (12112 bits), 1514 bytes captured (12112 bits) on interface en0, id 0
+    Section number: 1
+    Interface id: 0 (en0)
+    Encapsulation type: Ethernet (1)
+    Arrival Time: Feb  6, 2024 00:42:36.843224000 +01
+    UTC Arrival Time: Feb  5, 2024 23:42:36.843224000 UTC
+    Epoch Arrival Time: 1707176556.843224000
+    [Time shift for this packet: 0.000000000 seconds]
+    [Time delta from previous captured frame: 0.000503000 seconds]
+    [Time delta from previous displayed frame: 0.000000000 seconds]
+    [Time since reference or first frame: 4.766726000 seconds]
+    Frame Number: 53
+    Frame Length: 1514 bytes (12112 bits)
+    Capture Length: 1514 bytes (12112 bits)
+    [Frame is marked: False]
+    [Frame is ignored: False]
+    [Protocols in frame: eth:ethertype:ip:udp:data]
+    [Coloring Rule Name: UDP]
+    [Coloring Rule String: udp]
+Ethernet II, Src: Apple_df:06:41 (18:65:90:df:06:41), Dst: Routerboardc_40:5e:0a (6c:3b:6b:40:5e:0a)
+    Destination: Routerboardc_40:5e:0a (6c:3b:6b:40:5e:0a)
+    Source: Apple_df:06:41 (18:65:90:df:06:41)
+    Type: IPv4 (0x0800)
+Internet Protocol Version 4, Src: 192.168.3.254, Dst: 192.168.3.1
+    0100 .... = Version: 4
+    .... 0101 = Header Length: 20 bytes (5)
+    Differentiated Services Field: 0x00 (DSCP: CS0, ECN: Not-ECT)
+    Total Length: 1500
+    Identification: 0x3489 (13449)
+    000. .... = Flags: 0x0
+    ...0 0000 0000 0000 = Fragment Offset: 0
+    Time to Live: 64
+    Protocol: UDP (17)
+    Header Checksum: 0xb838 [validation disabled]
+    [Header checksum status: Unverified]
+    Source Address: 192.168.3.254
+    Destination Address: 192.168.3.1
+User Datagram Protocol, Src Port: 2001, Dst Port: 2257
+    Source Port: 2001
+    Destination Port: 2257
+    Length: 1480
+    Checksum: 0x5b6b [unverified]
+    [Checksum Status: Unverified]
+    [Stream index: 0]
+    [Timestamps]
+    UDP payload (1472 bytes)
+Data (1472 bytes)
+    Data [truncated]: 00000001000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+    [Length: 1472]
+

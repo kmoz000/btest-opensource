@@ -21,7 +21,8 @@ pub fn generate_prefixed_bytes(seq: u64, length: usize) -> Vec<u8> {
     let mut buf: Vec<u8> = vec![];
     let tmp = seq; // Replace with the actual value from your code
     buf.extend(vec![((((tmp / 256) / 256) / 256) % 256) as u8,(((tmp / 256) / 256) % 256) as u8, ((tmp / 256) % 256) as u8, (tmp % 256) as u8]);
-    buf.extend((0..(length - 4)).map(|_| trd.gen::<u8>()));
+    // buf.extend((0..(length - 4)).map(|_| trd.gen::<u8>()));
+    buf.extend((0..(length - 4)).map(|_| 0u8));
     buf
 }
 pub fn generate_random_array() -> [u8; 16] {

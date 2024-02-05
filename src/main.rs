@@ -1,13 +1,9 @@
 use dotenv::dotenv;
 use md5;
-use rand::RngCore;
-use std::env;
+use std::{env, time};
 use std::io::{Read, Write};
 use std::net::UdpSocket;
-use std::net::{SocketAddr, TcpListener, ToSocketAddrs};
-use tokio::io::AsyncWriteExt;
-
-use crate::constants::MESSAGE_PREFIX;
+use std::net::{SocketAddr, TcpListener};
 mod constants;
 mod utils;
 
@@ -114,23 +110,12 @@ async fn main() {
                         bufport.push((_store.current_port % constants::udp_port_offset) as u8);
                         if let Ok(_) = client.read(&mut buffer) {
                             client.write(&bufport).expect("Failed to send data");
-                            let addrs = [
-                                SocketAddr::from((
-                                    std::net::IpAddr::V4(std::net::Ipv4Addr::new(0, 0, 0, 0)),
-                                    _store.current_port,
-                                )),
-                                SocketAddr::from((
-                                    std::net::IpAddr::V6(std::net::Ipv6Addr::new(
-                                        0, 0, 0, 0, 0, 0, 0, 0,
-                                    )),
-                                    _store.current_port,
-                                )),
-                            ];
-                            if let Ok(sock) = UdpSocket::bind(&addrs[..]) {
-                                let _ = sock.set_nonblocking(true);
-                                let _ = sock.set_broadcast(true);
-                                let _ = sock.set_multicast_ttl_v4(42);
-                                let _ = sock.set_ttl(42);
+                            let local_addr: SocketAddr =
+                                format!("0.0.0.0:{}", _store.current_port).parse().unwrap();
+                            if let Ok(sock) = UdpSocket::bind(local_addr) {
+                                let _ = sock.set_broadcast(true).unwrap();
+                                let _ = sock.set_multicast_loop_v4(true).unwrap();
+                                sock.set_write_timeout(Some(time::Duration::from_secs(30))).unwrap();
                                 println!(
                                     "Server waiting for udp packets on port {}\n",
                                     _store.current_port
@@ -185,7 +170,11 @@ struct Action {
     remote_tx_speed: u32,
     local_tx_speed: u32,
 }
-async fn handle_tcp(mut socket: std::net::TcpStream, tx_size: u16, action: Action) -> Result<String, String>{
+async fn handle_tcp(
+    mut socket: std::net::TcpStream,
+    tx_size: u16,
+    action: Action,
+) -> Result<String, String> {
     println!("Connection established");
     socket
         .write(&hex::decode("01000000").unwrap_or_default())
@@ -229,24 +218,47 @@ async fn handle_udp(
     action: Action,
     client_address: SocketAddr,
 ) -> Result<String, String> {
-    let mut udpclient = client_address.clone();
     let myaddress = socket.local_addr().unwrap();
+
     println!("udp socket address: {}", myaddress.to_string());
-    udpclient.set_port(myaddress.port() + constants::udp_port_offset);
+    let udpclient: SocketAddr = format!(
+        "{}:{}",
+        client_address.ip(),
+        myaddress.port() + constants::udp_port_offset
+    )
+    .parse()
+    .unwrap();
+    let mut err_count: u64 = 0;
+    // Create an ICMP socket
+    // let icmp_rx_buffer = smoltcp::socket::icmp::PacketBuffer::new(
+    //     vec![smoltcp::socket::icmp::PacketMetadata::EMPTY],
+    //     vec![0; 4720],
+    // );
+    // let icmp_tx_buffer = smoltcp::socket::icmp::PacketBuffer::new(
+    //     vec![smoltcp::socket::icmp::PacketMetadata::EMPTY],
+    //     vec![0; 4720],
+    // );
+    // let mut icmp_socket = smoltcp::socket::icmp::Socket::new(icmp_rx_buffer, icmp_tx_buffer);
+    // let endpoint = smoltcp::wire::IpListenEndpoint::from(myaddress.port());
+    // icmp_socket
+    //     .bind(smoltcp::socket::icmp::Endpoint::Udp(endpoint))
+    //     .unwrap();
     match socket.connect(udpclient) {
         Ok(_) => {
-            print!("udp socket connected to {}\n", udpclient);
+            print!(
+                "udp socket connected to {} and broadcast: {}\n",
+                udpclient,
+                socket.broadcast().unwrap_or_default()
+            );
             let mut seq: u64 = 0;
             let tx_size: usize = action.tx_size.into();
             // let zeros_vec: Vec<u8> = vec![0; 1024];
             // let _ = socket.send(&zeros_vec).await;
-            let mut err_count: u64 = 0;
             loop {
-                // let message: [u8; MESSAGE_SIZE] =
-                // [MESSAGE_PREFIX, 0, 0, 0, 1, 0, 0, 0, 54, 110, 3, 0];
+                // let message: [u8; constants::MESSAGE_SIZE] =
+                // [constants::MESSAGE_PREFIX, 0, 0, 0, 1, 0, 0, 0, 54, 110, 3, 0];
                 // recv from remote_addr
-
-                let mut buf = vec![0; action.tx_size.into()];
+                let mut buf = vec![0; tx_size];
                 match action.direction.as_str() {
                     "TX" => {
                         let packet =
@@ -260,6 +272,15 @@ async fn handle_udp(
                                 return Ok("Done conunting error time to go out!".to_string());
                             }
                         };
+                        // match icmp_socket.recv() {
+                        //     Ok(b) => {
+                        //         println!("- from icmp socket got: {:?}:{}\n", b.0, b.1.to_string());
+                        //     }
+                        //     Err(err) => {
+                        //         println!("- from icmp socket got: {:?}", err);
+                        //         std::thread::sleep(std::time::Duration::from_millis(500));
+                        //     }
+                        // }
                     }
                     "RX" => {
                         if let Ok(_) = socket.recv(&mut buf) {
@@ -297,7 +318,7 @@ async fn handle_udp(
                         }
                     }
                 };
-                if err_count > action.tx_size.into() {
+                if err_count > (action.tx_size / 10).into() {
                     return Ok("done!".to_string());
                 }
             }
