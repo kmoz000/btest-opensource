@@ -255,6 +255,8 @@ async fn handle_udp(
             // let zeros_vec: Vec<u8> = vec![0; 1024];
             // let _ = socket.send(&zeros_vec).await;
             loop {
+                // pub const MESSAGE_PREFIX: u8 = 0x07;
+                // pub const MESSAGE_SIZE: usize = 12;
                 // let message: [u8; constants::MESSAGE_SIZE] =
                 // [constants::MESSAGE_PREFIX, 0, 0, 0, 1, 0, 0, 0, 54, 110, 3, 0];
                 // recv from remote_addr
