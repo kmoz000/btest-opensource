@@ -7,6 +7,7 @@
 </center>
 ## Table of Contents
 
+- [Table of Contents](#table-of-contents)
 - [Overview](#overview)
 - [Prerequisites](#prerequisites)
 - [Installation](#installation)
@@ -59,7 +60,7 @@ AUTH="true"
 Run BTestServer using the following command:
 
 ```bash
-cargo run .
+cd go_version && go mod tidy && go run .
 ```
 
 ## Features
@@ -73,7 +74,7 @@ cargo run .
 Run the tests to ensure the reliability of the application:
 
 ```bash
-cargo test
+go test
 ```
 
 ## Contributing

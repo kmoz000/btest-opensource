@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"crypto/md5"
 	"crypto/rand"
 	"encoding/binary"
@@ -227,17 +226,34 @@ func hashGen(inputPassword string, nonce [16]byte) string {
 	computedMD5Hex := hex.EncodeToString(hash[:])
 	return computedMD5Hex
 }
-func generatePrefixedBytes(seq uint64, length int) []byte {
-	// Create a slice with the specified length and prefix
-	// Extend the slice with the provided prefix
+
+// func generatePrefixedBytes(seq uint64, length int) []byte {
+// 	// Create a slice with the specified length and prefix
+// 	// Extend the slice with the provided prefix
+// 	var buf []byte
+// 	tmp := seq // Replace with the actual value from your code
+// 	buf = append(buf, byte((tmp/256/256/256)%256), byte((tmp/256/256)%256), byte((tmp/256)%256), byte(tmp%256))
+// 	// buf = append(buf, byte(0), byte(0), byte(0), byte(0)) // Uncomment this line to use random values instead of zeros
+
+// 	// Efficiently fill the remaining portion of the slice with zeros
+// 	buf = append(buf, bytes.Repeat([]byte{0}, length-4)...)
+
+//		return buf
+//	}
+func genPacket(seq uint64, size uint64) []byte {
 	var buf []byte
 	tmp := seq // Replace with the actual value from your code
+	// empty16 := make([]byte, 16)
+	randomBytes := make([]byte, (size - 28 - 4))
+	rand.Read(randomBytes)
+	// const1, _ := hex.DecodeString("2cc82cc81bc0e12e6c3b6b405e0a0800450005dc")
+	// const2, _ := hex.DecodeString("c0a803fdc0a80301080109")
+	// const5, _ := hex.DecodeString("0a80301c0a803fd0")
+	// const36, _ := hex.DecodeString("6c3b6c3b6b405e0a2cc81bc0e12e0800450005dc7fd4000040116cee")
+	// const23, _ := hex.DecodeString("909080105c80000000004")
+	// const28, _ := hex.DecodeString("016c3b6b405e0a2cc81bc0e12e0800456c3b6c3b6b405e0a2cc81bc0e12e0800450005dc")
 	buf = append(buf, byte((tmp/256/256/256)%256), byte((tmp/256/256)%256), byte((tmp/256)%256), byte(tmp%256))
-	// buf = append(buf, byte(0), byte(0), byte(0), byte(0)) // Uncomment this line to use random values instead of zeros
-
-	// Efficiently fill the remaining portion of the slice with zeros
-	buf = append(buf, bytes.Repeat([]byte{0}, length-4)...)
-
+	buf = append(buf, randomBytes...)
 	return buf
 }
 func getIPAndPort(addr net.Addr) (string, int) {
@@ -273,15 +289,15 @@ func handleUDP(sock *net.UDPConn, action Action, clientAddress net.Addr) {
 	switch action.Direction {
 	case "TX":
 		for {
-			data := generatePrefixedBytes(seq, int(action.TxSize-28))
+			data := genPacket(seq, uint64(action.TxSize))
 			if _, err := sock.WriteToUDPAddrPort(data, netip.AddrPortFrom(netip.MustParseAddr(peerAd), uint16(sockPort+UdpPortOffset))); err != nil {
 				err_count++
 				fmt.Printf("Error from TX: %s\n", err.Error())
 			}
 			seq++
-			fmt.Printf(" - (%d)", seq)
-			time.Sleep(1000 * time.Millisecond)
-			if err_count > int(action.TxSize/10) || seq >= uint64(UdpPortOffset*UdpPortOffset) {
+			fmt.Printf("%d ", seq)
+			time.Sleep(250 * time.Millisecond)
+			if err_count > int(action.TxSize/10) || seq >= uint64(action.TxSize*action.TxSize) {
 				return
 			}
 		}
