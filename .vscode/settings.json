@@ -1,0 +1,14 @@
+{
+    "C_Cpp.errorSquiggles": "disabled",
+    "files.associations": {
+        "*.embeddedhtml": "html",
+        "*.js": "javascript",
+        "*.rs": "rust",
+        ".env": "bat",
+        "*.proto": "properties",
+        "*.in": "rust",
+        "*.xml": "xml",
+        "*.pp": "bat",
+        "string.h": "c"
+    }
+}
