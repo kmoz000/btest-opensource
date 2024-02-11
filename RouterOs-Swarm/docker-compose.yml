@@ -1,0 +1,17 @@
+version: "3"
+
+services:
+  routeros-latest:
+    image: km8oz/docker-routeros:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: routeros_latest
+    restart: unless-stopped
+    cap_add:
+      - NET_ADMIN
+    devices:
+      - /dev/net/tun
+      - /dev/kvm
+    ports:
+      - "2000-2256:2000-2256"

@@ -11,8 +11,10 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/joho/godotenv"
+	"github.com/shirou/gopsutil/cpu"
 )
 
 // Store struct to hold constants
@@ -96,7 +98,7 @@ func main() {
 		// Send auth requested command
 		if requireAuth {
 			// Sending Data
-			client.Write(hexDecode("02000000"))
+			client.Write([]byte{2, 0, 0, 0})
 
 			// Setting Digest
 			randomDigest := generateRandomArray()
@@ -110,7 +112,7 @@ func main() {
 			// Printing Data
 			currentPassHash := hashGen(password, randomDigest)
 			receivedPassHash := hex.EncodeToString(data[:16])
-			receivedUsername := strings.TrimRight(string(data[16:100]), "\x00")
+			receivedUsername := strings.Trim(string(data[16:100]), "\x00")
 			currentUsername := username
 			isValid := receivedUsername == currentUsername && receivedPassHash == currentPassHash
 			authIsValid = isValid
@@ -130,7 +132,7 @@ func main() {
 		if !requireAuth || authIsValid {
 			fmt.Println("Sending hello")
 			// Sending hello
-			client.Write(hexDecode("01000000"))
+			client.Write([]byte{1, 0, 0, 0})
 
 			if action.Proto == "TCP" {
 				go handleTCP(client, int(action.TxSize), action)
@@ -140,19 +142,23 @@ func main() {
 			} else {
 				// send ready message:
 				// Send UDP data
-				bufPort := make([]byte, 2)
+				// bufPort := make([]byte, 2)
 				store.CurrentPort++
-				bufPort[0] = byte(store.CurrentPort / UdpPortOffset)
-				bufPort[1] = byte(store.CurrentPort % UdpPortOffset)
+				bufPort := []byte{byte(store.CurrentPort / UdpPortOffset)}
+				// bufPort[5] = byte(store.CurrentPort / UdpPortOffset)
+				// bufPort[6] = byte(store.CurrentPort % UdpPortOffset)
 
 				_, err := client.Read(buffer)
+
+				// fmt.Printf("buffer: %v\n", buffer[:12])
 				if err == nil {
 					client.Write(bufPort)
 					localAddr, _ := net.ResolveUDPAddr("udp", fmt.Sprintf("0.0.0.0:%d", store.CurrentPort))
 					sock, err := net.ListenUDP("udp", localAddr)
 					if err == nil {
 						fmt.Printf("Server waiting for udp packets on port %d\n", store.CurrentPort)
-						go handleUDP(sock, action, clientAddress)
+						go handleUDP(sock, action, clientAddress, client)
+						go handCPUload(client)
 					}
 				} else {
 					client.Write(hexDecode("00000000"))
@@ -241,6 +247,7 @@ func hashGen(inputPassword string, nonce [16]byte) string {
 
 //		return buf
 //	}
+
 func genPacket(seq uint64, size uint64) []byte {
 	var buf []byte
 	tmp := seq // Replace with the actual value from your code
@@ -282,10 +289,33 @@ func handleTCP(client net.Conn, txSize int, action Action) {
 	// Implement the handleTCP function
 	// Handle TCP logic
 }
-
-func handleUDP(sock *net.UDPConn, action Action, clientAddress net.Addr) {
+func handCPUload(client net.Conn) {
+	seqTCP := uint32(0)
+	recbuf := make([]byte, 12)
+	error_count := 0
+	client.SetReadDeadline(<-time.After(2 * time.Second))
+	for {
+		percentages, _ := cpu.Percent(time.Second, false)
+		fmt.Printf("Localcpu load:%f\n", percentages[0])
+		seqbuff := [12]byte{7, byte(int(percentages[0] + 128)), byte((seqTCP / 256 / 256) % 256), byte((seqTCP / 256) % 256), byte(seqTCP % 256), 0, 0, 0, 0, 0, 0, 0}
+		if _, err := client.Write(seqbuff[:]); err != nil {
+			error_count++
+		} else {
+			if _, err := client.Read(recbuf); err == nil {
+				fmt.Printf("Remote cpuload:%d\n", recbuf[1])
+			}
+		}
+		seqTCP++
+		if error_count > 10 {
+			return
+		}
+		// time.Sleep(2 * time.Second)
+	}
+}
+func handleUDP(sock *net.UDPConn, action Action, clientAddress net.Addr, client net.Conn) {
 	// Implement the handleUDP function
 	// Handle UDP logic
+	// seqTCP := uint32(0)
 	seq := uint64(0)
 	peerAd, _ := getIPAndPort(clientAddress)
 	err_count := 0
@@ -300,7 +330,7 @@ func handleUDP(sock *net.UDPConn, action Action, clientAddress net.Addr) {
 			}
 			seq++
 			// fmt.Printf("%d ", seq)
-			// time.Sleep(250 * time.Millisecond)
+			time.Sleep(250 * time.Millisecond)
 			// if err_count > int(action.TxSize/10) || seq >= uint64(action.TxSize*action.TxSize) {
 			if err_count > int(action.TxSize/10) {
 				return
@@ -308,6 +338,26 @@ func handleUDP(sock *net.UDPConn, action Action, clientAddress net.Addr) {
 		}
 	case "RX":
 	default:
-
+		for {
+			// received := make([]byte, action.TxSize)
+			data := genPacket(seq, uint64(action.TxSize))
+			clientAddress := netip.AddrPortFrom(netip.MustParseAddr(peerAd), uint16(sockPort+UdpPortOffset))
+			if _, err := sock.WriteToUDPAddrPort(data, clientAddress); err != nil {
+				err_count++
+				fmt.Printf("Error from TX: %s\n", err.Error())
+			}
+			// fmt.Printf("%d ", seq)
+			time.Sleep(250 * time.Millisecond)
+			seq++
+			// if err_count > int(action.TxSize/10) || seq >= uint64(action.TxSize*action.TxSize) {
+			// if size, address, err := sock.ReadFromUDP(received); size > 0 && err == nil {
+			// 	fmt.Printf("received seq: %d from (%s)", binary.LittleEndian.Uint32(received[0:4]), address.String())
+			// } else {
+			// 	err_count++
+			// }
+			if err_count > int(10) {
+				return
+			}
+		}
 	}
 }
