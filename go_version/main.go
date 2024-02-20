@@ -288,6 +288,7 @@ func getIPAndPort(addr net.Addr) (string, int) {
 func handleTCP(client net.Conn, txSize int, action Action) {
 	// Implement the handleTCP function
 	// Handle TCP logic
+
 }
 func handCPUload(client net.Conn) {
 	seqTCP := uint32(0)
